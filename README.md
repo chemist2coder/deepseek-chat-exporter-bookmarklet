@@ -47,11 +47,11 @@ A focused tool for working with DeepSeek. At ~37 KB (vs "all-in-one" combos >10 
 
 **Step 1 — formats** (the RU/EN language switcher is in the top-right corner):
 
-<img src="PNG/screenshot-step-1-formats.png" width="75%" alt="Step 1 — formats">
+<img src="PNG/screenshot-step-1-formats.png" width="50%" alt="Step 1 — formats">
 
 **Step 2 — attachments**:
 
-<img src="PNG/screenshot-step-2-attachments.png" width="75%" alt="Step 2 — attachments">
+<img src="PNG/screenshot-step-2-attachments.png" width="50%" alt="Step 2 — attachments">
 
 ---
 
