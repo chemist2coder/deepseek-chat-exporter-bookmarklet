@@ -1,0 +1,51 @@
+Creative Commons Attribution-NonCommercial 4.0 International Public License
+Лицензия Creative Commons «С указанием авторства — Некоммерческая» 4.0 Международная
+
+Copyright (c) 2026 chemist2coder
+
+--------------------------------------------------------------------------------
+[EN] STANDARD LICENSE SUMMARY
+--------------------------------------------------------------------------------
+By exercising the Licensed Rights (defined below), You accept and agree to be bound by the terms and conditions of this Creative Commons Attribution-NonCommercial 4.0 International Public License ("Public License").
+
+You are free to:
+- Share: copy and redistribute the material in any medium or format.
+- Adapt: remix, transform, and build upon the material.
+
+Under the following terms:
+- Attribution: You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+- NonCommercial: You may not use the material for commercial purposes.
+
+--------------------------------------------------------------------------------
+[RU] КРАТКОЕ ОПИСАНИЕ СТАНДАРТНОЙ ЛИЦЕНЗИИ
+--------------------------------------------------------------------------------
+Осуществляя Лицензионные права (определённые ниже), Вы принимаете и соглашаетесь соблюдать условия настоящей Международной публичной лицензии Creative Commons «С указанием авторства — Некоммерческая» 4.0 («Публичная лицензия»).
+
+Вы вправе:
+- Делиться: копировать и распространять материал на любом носителе и в любом формате.
+- Адаптировать: перерабатывать, видоизменять и создавать на основе материала.
+
+При соблюдении следующих условий:
+- С указанием авторства: Вы должны указать надлежащим образом автора, дать ссылку на лицензию и указать, были ли внесены изменения.
+- Некоммерческое использование: Вы не можете использовать материал в коммерческих целях.
+
+================================================================================
+ADDITIONAL TERMS BY THE AUTHOR (chemist2coder)
+ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ АВТОРА (chemist2coder)
+================================================================================
+
+[EN] Additional Terms:
+1. Specific Attribution: You must provide a link to the original repository (https://github.com/chemist2coder/deepseek-chat-export-bookmarklet) when sharing or adapting the code.
+2. Author's Commercial Rights (Dual Licensing): The Author (chemist2coder) reserves the exclusive right to use this software for commercial purposes or to grant separate commercial licenses to third parties.
+3. Disclaimer of Liability: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. THE AUTHOR IS NOT LIABLE FOR ANY DATA LOSS, EXPORT ERRORS, OR ANY OTHER DAMAGES ARISING FROM THE USE OF THIS CODE. The tool relies on DeepSeek's internal (undocumented) API, which may change or stop working at any time without notice. Users are solely responsible for verifying their exported data.
+4. Feedback and Bug Reports (Author's Note): The Author encourages users to report bugs or issues. If you encounter any problems, please contact the Author via the repository's Issues page.
+
+[RU] Дополнительные условия:
+1. Конкретное указание авторства: При распространении или адаптации кода вы обязаны предоставить ссылку на оригинальный репозиторий (https://github.com/chemist2coder/deepseek-chat-export-bookmarklet).
+2. Права автора на коммерциализацию (двойное лицензирование): Автор (chemist2coder) сохраняет исключительное право использовать данное программное обеспечение в коммерческих целях или выдавать отдельные коммерческие лицензии третьим лицам.
+3. Отказ от ответственности: ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ ПРЕДОСТАВЛЯЕТСЯ «КАК ЕСТЬ», БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ. АВТОР НЕ НЕСЁТ ОТВЕТСТВЕННОСТИ ЗА ЛЮБУЮ ПОТЕРЮ ДАННЫХ, ОШИБКИ ЭКСПОРТА ИЛИ ИНОЙ УЩЕРБ, ВОЗНИКШИЙ В РЕЗУЛЬТАТЕ ИСПОЛЬЗОВАНИЯ ДАННОГО КОДА. Инструмент полагается на внутренний (недокументированный) API DeepSeek, который может измениться или перестать работать в любой момент без предупреждения. Пользователи самостоятельно несут ответственность за проверку экспортированных данных.
+4. Обратная связь и сообщения об ошибках: Автор приветствует сообщения об ошибках. Если вы столкнулись с проблемой — напишите на странице Issues репозитория.
+
+--------------------------------------------------------------------------------
+[EN] No warranties are given. The license may not give you all of the permissions necessary for your intended use.
+[RU] Гарантии не предоставляются. Лицензия может не давать всех разрешений, необходимых для Вашего предполагаемого использования.

@@ -1,0 +1,749 @@
+/*
+ * ============================================================================
+ *  DeepSeek Chat Exporter — bilingual bookmarklet (COMMENTED / readable version)
+ * ============================================================================
+ *
+ *  A single bookmarklet with a built-in RU/EN language switcher.
+ *  Exports a chat from chat.deepseek.com to Markdown / HTML / JSON / TXT,
+ *  including images, attached documents, and clickable web-search sources.
+ *
+ *  NOTE: this is the READABLE copy for studying the code. The working
+ *  bookmarklet is `bookmarklet_RU_bilingual.txt` (minified, no comments).
+ *
+ *  LANGUAGE: JavaScript (not Java).
+ *
+ *  OVERVIEW:
+ *    1. i18n dictionary (I.ru / I.en) + t(key) translation helper.
+ *    2. Helpers (status toast, script loader, token/session, time, HTML escape,
+ *       LaTeX formula normalization).
+ *    3. Fetch the full chat history via DeepSeek's internal API.
+ *    4. Parse messages: text (fragments), images, documents, web-search sources.
+ *    5. Wizard: step 1 (formats) and step 2 (attachments), with a language
+ *       switcher (RU/EN) that re-renders the dialog while preserving state.
+ *    6. Download images/files, build MD/HTML/JSON/TXT, save a ZIP.
+ *
+ *  Entry point at the bottom: javascript:(async function(){ ... })();
+ * ============================================================================
+ */
+
+
+// ============================================================================
+//  1. I18N DICTIONARY + TRANSLATION HELPER
+// ============================================================================
+
+var I = { ru: {}, en: {} };
+
+// Russian strings
+I.ru = {
+  st_fetch: '> Получение истории чата...', st_process: '> Обработка сообщений...',
+  st_build: '> Формирование архива...', st_save: '> Сохранение...',
+  err_nodata: 'Не удалось получить данные. Откройте залогиненную страницу чата DeepSeek (адрес /a/chat/s/...).',
+  err_empty: 'Пустой ответ API', err_nomsg: 'Сообщения не найдены',
+  err_script: 'Ошибка скрипта: ', err_nofmt: 'Выберите хотя бы один формат текста!',
+  warn_img_a: '> Внимание: ', warn_img_b: ' картинок не скачались (оставлены ссылками). Если папка images пустая — блокирует CORS.',
+  warn_cit: 'Цитаты [citation:N] найдены, но источники не распознаны. Ключи сообщения: ',
+  s1_t: 'Экспорт текста', s1_sub: 'Выберите форматы (можно несколько):',
+  f_md_d: 'Разметка, списки, формулы и код.', f_html_d: 'Открывается в браузере как веб-страница.',
+  f_json_d: 'Структурированный формат для скриптов.', f_txt_d: 'Простой текст без разметки.',
+  add_lbl: 'Дополнительно:', o_user: 'Включить мои вопросы', o_think: 'Включить размышления DeepSeek',
+  o_math: 'Конвертировать формулы LaTeX', o_rem_t: 'Запомнить настройки (Шаг 1)',
+  btn_cancel: 'Отмена', btn_next: 'Далее',
+  s2_t: 'Экспорт вложений чата', s2_img: 'Изображения',
+  i_zip: 'Упаковать в ZIP (Рекомендуется для MD и HTML)', i_zip_d: 'Картинки скачаются в папку images. Работает офлайн.',
+  i_url: 'Оставить ссылки на картинки', i_url_d: 'Только ссылки. Могут перестать работать.',
+  i_b64: 'Вшить картинки в MD', i_b64_d: 'Работает только в Markdown. Файл будет очень большим.',
+  s2_files: 'Прочие вложения', f_lbl: 'PDF, DOCX, XLSX, TXT, CSV, PY, IPYNB, ZIP и другие',
+  f_d: 'Скачиваются в папку _files. Внимание: файл может не скачаться (нет прямой ссылки или блокирует CORS).',
+  o_rem_i: 'Запомнить настройки (Шаг 2)', btn_back: 'Назад', btn_export: 'Экспорт', lang_lbl: 'Язык:',
+  m_user: '# you asked', m_ai: '# deepseek response', m_time: 'message time: ', m_think: 'Thinking',
+  m_sources: 'Источники:', h_title: 'Экспорт чата', h_sources: 'Источники:',
+  t_user: '[ПОЛЬЗОВАТЕЛЬ]', t_ai: '[DEEPSEEK]', t_file: '[ФАЙЛ]', t_think: '[Размышления]', t_sources: '[Источники]'
+};
+
+// English strings
+I.en = {
+  st_fetch: '> Fetching chat history...', st_process: '> Processing messages...',
+  st_build: '> Building archive...', st_save: '> Saving...',
+  err_nodata: 'Could not get data. Open a logged-in DeepSeek chat page (URL like /a/chat/s/...).',
+  err_empty: 'Empty API response', err_nomsg: 'No messages found',
+  err_script: 'Script error: ', err_nofmt: 'Select at least one text format!',
+  warn_img_a: '> Warning: ', warn_img_b: ' image(s) not downloaded (left as links). If the images folder is empty - CORS is blocking.',
+  warn_cit: 'Citations [citation:N] found, but sources not detected. Message keys: ',
+  s1_t: 'Export text', s1_sub: 'Select formats (multiple allowed):',
+  f_md_d: 'Markup, lists, formulas and code.', f_html_d: 'Opens in the browser as a web page.',
+  f_json_d: 'Structured format for scripts.', f_txt_d: 'Plain text without markup.',
+  add_lbl: 'Additional:', o_user: 'Include my questions', o_think: 'Include DeepSeek reasoning',
+  o_math: 'Convert LaTeX formulas', o_rem_t: 'Remember settings Step 1',
+  btn_cancel: 'Cancel', btn_next: 'Next',
+  s2_t: 'Export chat attachments', s2_img: 'Images',
+  i_zip: 'Pack in ZIP (Recommended for MD and HTML)', i_zip_d: 'Images download into the images folder. Works offline.',
+  i_url: 'Keep image links', i_url_d: 'Links only. May stop working.',
+  i_b64: 'Embed images in MD', i_b64_d: 'Works only in Markdown. File will be very large.',
+  s2_files: 'Other attachments', f_lbl: 'PDF, DOCX, XLSX, TXT, CSV, PY, IPYNB, ZIP and other',
+  f_d: 'Download into the _files folder. Note: a file may fail to download (no direct link or CORS blocks it).',
+  o_rem_i: 'Remember settings Step 2', btn_back: 'Back', btn_export: 'Export', lang_lbl: 'Language:',
+  m_user: '# you asked', m_ai: '# deepseek response', m_time: 'message time: ', m_think: 'Thinking',
+  m_sources: 'Sources:', h_title: 'Chat Export', h_sources: 'Sources:',
+  t_user: '[USER]', t_ai: '[DEEPSEEK]', t_file: '[FILE]', t_think: '[Thinking]', t_sources: '[Sources]'
+};
+
+// Current language (persisted in localStorage, default 'ru').
+var lang = localStorage.getItem('ds_lang') || 'en';
+
+// Translation helper: return the string for the current language (fallback to RU, then the key).
+function t(k) { return (I[lang] && I[lang][k]) || I.ru[k] || k; }
+
+
+// ============================================================================
+//  2. HELPERS
+// ============================================================================
+
+// Pause for a number of milliseconds (rarely used now).
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+// Show a small green status toast in the top-right corner (progress).
+function showMsg(x) {
+  var d = document.getElementById('ds-msg');
+  if (!d) {
+    d = document.createElement('div');
+    d.id = 'ds-msg';
+    Object.assign(d.style, {
+      position: 'fixed', top: '10px', right: '10px',
+      backgroundColor: '#0c0c0c', color: '#7CB342',
+      padding: '10px 15px', borderRadius: '5px',
+      zIndex: '999999', fontFamily: 'Consolas,monospace',
+      fontSize: '13px', boxShadow: '0 0 10px rgba(124,179,66,0.3)',
+      border: '1px solid #7CB342'
+    });
+    document.body.appendChild(d);
+  }
+  d.innerHTML = x;
+}
+
+// Remove the status toast.
+function removeMsg() { var d = document.getElementById('ds-msg'); if (d) d.remove(); }
+
+// Load an external JS library from a CDN (dynamically insert a <script> tag).
+function loadScript(src) {
+  return new Promise(function (res, rej) {
+    var s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+// Read the DeepSeek user token from localStorage (key "userToken", JSON {"value":"..."}).
+function getToken() { try { return JSON.parse(localStorage.getItem('userToken')).value; } catch (e) { return null; } }
+
+// Extract the chat id from the URL: https://chat.deepseek.com/a/chat/s/<id>.
+function getSid() { var m = location.href.match(/\/a\/chat\/s\/([a-f0-9-]+)/); return m ? m[1] : null; }
+
+// Format a timestamp into "YYYY-MM-DD HH:MM:SS" (handles seconds or milliseconds).
+function fmtTime(ts) {
+  if (!ts) return '';
+  var ms = (ts < 1e12) ? ts * 1000 : ts;
+  var d = new Date(ms);
+  var p = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' +
+         p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+
+// Escape HTML special characters (& < >) for safe insertion into HTML.
+function escHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Normalize LaTeX formulas for Obsidian/GitHub:
+//   \[...\] -> $$...$$    \(...\) -> $...$    \$\$...\$\$ -> $$...$$    \$...\$ -> $...$
+// Replacements are PAIRED (open+close) so a lone \$ (currency) is not broken.
+// Code blocks (``` ... ```) are skipped.
+function normMath(s) {
+  var T = String.fromCharCode(96);       // backtick `
+  var F = T + T + T;                     // ``` (code fence)
+  var parts = String(s || '').split(F);  // split on code fences
+  for (var i = 0; i < parts.length; i += 2) {   // even indexes = outside code blocks
+    var x = parts[i];
+    x = x.replace(/\\{1,2}\[([\s\S]*?)\\{1,2}\]/g, '$$$$$1$$$$');
+    x = x.replace(/\\{1,2}\(([\s\S]*?)\\{1,2}\)/g, '$$$1$$');
+    x = x.replace(/\\\$\$([\s\S]*?)\\\$\$/g, '$$$$$1$$$$');
+    x = x.replace(/\\\$([^\n$]+?)\\\$/g, '$$$1$$');
+    parts[i] = x;
+  }
+  return parts.join(F);
+}
+
+
+// ============================================================================
+//  3. FETCH THE FULL CHAT HISTORY VIA DEEPSEEK'S INTERNAL API
+// ============================================================================
+
+showMsg(t('st_fetch'));
+
+var token = getToken();
+var sid = getSid();
+if (!token || !sid) { alert(t('err_nodata')); return; }
+
+// Internal (undocumented) API — the same request the site itself makes.
+var resp = await fetch(
+  'https://chat.deepseek.com/api/v0/chat/history_messages?chat_session_id=' + sid + '&cache_version=0',
+  { headers: { Authorization: 'Bearer ' + token }, credentials: 'include' }
+);
+if (!resp.ok) throw new Error('API HTTP ' + resp.status);
+
+var json = await resp.json();
+var biz = (json && json.data && json.data.biz_data) ? json.data.biz_data : null;
+if (!biz) throw new Error(t('err_empty'));
+
+// Chat title -> safe filename (letters/digits/_- only, max 50 chars).
+var title = (biz.chat_session && biz.chat_session.title) || 'DeepSeek_Chat';
+var chatName = (title
+  .replace(/[^A-Za-z0-9А-Яа-яЁё_-]+/g, '_')
+  .replace(/^_+|_+$/g, '')
+  .substring(0, 50)) || 'DeepSeek_Chat';
+
+
+// ============================================================================
+//  4. PARSE MESSAGES
+// ============================================================================
+
+var all = (biz.chat_messages) || [];
+var byId = {};
+all.forEach(function (m) { byId[m.message_id] = m; });
+
+// Messages form a chain via parent_id; walk from the last message backwards.
+var cur = (biz.chat_session && biz.chat_session.current_message_id) || null;
+var chain = [];
+var seen = new Set();
+while (cur && byId[cur] && !seen.has(cur)) {
+  seen.add(cur);
+  chain.push(byId[cur]);
+  cur = byId[cur].parent_id;
+}
+chain.reverse();
+
+// Join fragments of the given types (REQUEST = question, RESPONSE = answer, THINK = reasoning).
+function fragJoin(m, types) {
+  var out = [];
+  (m.fragments || []).forEach(function (f) {
+    if (types.indexOf(f.type) >= 0 && f.content && String(f.content).trim()) out.push(String(f.content).trim());
+  });
+  return out.join('\n\n');
+}
+
+// Collect image URLs from files[]/fragments[] (file_id+state or signed_path).
+function collectImgs(m) {
+  var seenObj = {};
+  function add(u) { if (u && !seenObj[u]) { seenObj[u] = 1; } }
+  function norm(u) {
+    try {
+      var x = new URL(u);
+      if (x.hostname === 'files.deepseeksvc.com' && !x.searchParams.has('ty')) x.searchParams.set('ty', 'p');
+      return x.toString();
+    } catch (e) { return u; }
+  }
+  function spUrl(u) {
+    var x = /^https?:\/\//i.test(u) ? u : 'https://files.deepseeksvc.com/api' + (u.indexOf('/') === 0 ? '' : '/') + u;
+    return norm(x);
+  }
+  function fidUrl(fid, st) {
+    var n = String(fid).replace(/^file-/, '');
+    var r = String(st);
+    if (/%[0-9a-f]{2}/i.test(r)) { try { r = decodeURIComponent(r); } catch (e) {} }
+    return 'https://files.deepseeksvc.com/api/file?file_id=' + encodeURIComponent(n) + '&state=' + encodeURIComponent(r) + '&ty=p';
+  }
+  function deep(o, names) {
+    if (!o || typeof o !== 'object') return null;
+    if (Array.isArray(o)) { for (var i = 0; i < o.length; i++) { var v = deep(o[i], names); if (v) return v; } return null; }
+    for (var j = 0; j < names.length; j++) {
+      if (o[names[j]] !== undefined && o[names[j]] !== null && o[names[j]] !== '') return o[names[j]];
+    }
+    return null;
+  }
+  function walk(o) {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    var img = deep(o, ['image_url', 'imageUrl', 'preview_url', 'previewUrl', 'url']);
+    if (img && String(img).indexOf('files.deepseeksvc.com/api/file') >= 0) add(norm(String(img)));
+    var sp = deep(o, ['signed_path', 'signedPath']);
+    if (sp && o.is_image === true) add(spUrl(String(sp)));
+    var fid = deep(o, ['file_id', 'fileId']), st = deep(o, ['state']);
+    if (fid && st) add(fidUrl(String(fid), String(st)));
+    for (var k in o) walk(o[k]);
+  }
+  (m.files || []).forEach(function (f) { walk(f); });
+  (m.fragments || []).forEach(function (f) { walk(f); });
+  return Object.keys(seenObj);
+}
+
+// Collect documents (non-images) by file_name + download URL.
+function collectFiles(m) {
+  var out = []; var seen = {};
+  function add(nm, url) { var k = (nm || '') + '|' + (url || ''); if (nm && !seen[k]) { seen[k] = 1; out.push({ name: nm, url: url }); } }
+  function fUrl(o) {
+    if (o.url) return String(o.url).trim();
+    if (o.signed_path) { var sp = String(o.signed_path).trim(); return sp.indexOf('/') === 0 ? 'https://chat.deepseek.com' + sp : sp; }
+    if (o.file_id && o.state) return 'https://files.deepseeksvc.com/api/file?file_id=' + encodeURIComponent(String(o.file_id).replace(/^file-/, '')) + '&state=' + encodeURIComponent(o.state) + '&ty=p';
+    return null;
+  }
+  function wlk(o) {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o)) { o.forEach(wlk); return; }
+    var nm = o.file_name || o.filename || '';
+    var isImg = o.is_image === true || /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(String(nm));
+    if (nm && !isImg) add(String(nm), fUrl(o));
+    for (var k in o) wlk(o[k]);
+  }
+  (m.files || []).forEach(wlk);
+  (m.fragments || []).forEach(wlk);
+  return out;
+}
+
+// Collect web-search sources by deep-walking the whole message (any object with a URL,
+// except the internal deepseeksvc.com file links).
+function collectSources(m) {
+  var out = []; var seen = {};
+  function isDS(u) { return /deepseeksvc\.com/i.test(String(u || '')); }
+  function add(o) {
+    if (!o || typeof o !== 'object') return;
+    var u = o.url || o.link || o.href || '';
+    var ttl = o.title || o.name || o.source || o.site_name || '';
+    if (!u && o.url_citation) { u = o.url_citation.url || ''; ttl = ttl || o.url_citation.title || ''; }
+    var ix = o.index || o.idx || o.num || '';
+    if ((u || ttl) && !isDS(u)) {
+      var k = (u || '') + '|' + (ttl || '');
+      if (!seen[k]) { seen[k] = 1; out.push({ title: String(ttl || u || 'link'), url: String(u || ''), index: ix }); }
+    }
+  }
+  function wlk(o) {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o)) { o.forEach(wlk); return; }
+    if (o.url || o.link || o.href || o.url_citation) add(o);
+    for (var k in o) wlk(o[k]);
+  }
+  wlk(m);
+  return out;
+}
+
+// Build the msgs array from the chain.
+var msgs = [];
+var citMiss = false;   // flag: citations found but sources not detected
+var citKeys = '';      // diagnostic: message keys + fragment types
+
+chain.forEach(function (m) {
+  if (m.status && m.status !== 'FINISHED') return;
+  var role = (m.role === 'USER') ? 'user' : 'assistant';
+
+  var text = fragJoin(m, [role === 'user' ? 'REQUEST' : 'RESPONSE']);
+  if (!text) { text = (typeof m.content === 'string') ? m.content.trim() : ''; }
+
+  var raw = text;          // raw text (before formula normalization)
+  text = normMath(text);   // normalize formulas
+
+  var think = fragJoin(m, ['THINK']);
+  if (!think) { think = (typeof m.thinking_content === 'string') ? m.thinking_content.trim() : ''; }
+
+  var imgs = collectImgs(m);
+  var files = collectFiles(m);
+  var sources = collectSources(m);
+
+  // Replace [citation:N] with clickable [N](url) links.
+  if (sources.length) {
+    var cm = {};
+    sources.forEach(function (s, i) { cm[s.index || (i + 1)] = s.url; });
+    var cf = function (s) {
+      return String(s || '').replace(/\[citation[:\s]*(\d+)\]/g, function (a, n) {
+        var u = cm[parseInt(n, 10)];
+        return u ? '[' + n + '](' + u + ')' : a;
+      });
+    };
+    text = cf(text); raw = cf(raw); think = cf(think);
+  } else if (/\[citation[:\s]/.test(text + ' ' + think)) {
+    citMiss = true;
+    if (!citKeys) {
+      citKeys = Object.keys(m).join(',') + ' || frag: ' + (m.fragments || []).map(function (f) { return f.type; }).join('|');
+    }
+  }
+
+  msgs.push({ role: role, text: text, raw: raw, think: think, imgs: imgs, files: files, sources: sources, ts: m.inserted_at });
+});
+
+if (msgs.length === 0) throw new Error(t('err_nomsg'));
+
+
+// ============================================================================
+//  5. LOAD LIBRARIES (JSZip + marked)
+// ============================================================================
+
+if (!window.JSZip) { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'); }
+if (!window.marked) { await loadScript('https://cdn.jsdelivr.net/npm/marked@11.2.0/marked.min.js'); }
+
+function renderMd(s) { try { return window.marked.parse(s || ''); } catch (e) { return escHtml(s || ''); } }
+
+var savedText = localStorage.getItem('ds_text_pref');
+var savedImg = localStorage.getItem('ds_img_pref');
+
+
+// ============================================================================
+//  6. WIZARD (with the language switcher)
+// ============================================================================
+
+var opt = await new Promise(function (res) {
+
+  var m = document.createElement('div');
+  m.id = 'ds-wizard';
+  document.body.appendChild(m);
+  var curStep = 1;   // 1 = formats, 2 = attachments
+
+  // Build the dialog HTML for the current language.
+  function makeHTML() {
+    var L = t('lang_lbl');
+    return '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999998;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;font-size:13px;">'
+      + '<style>.ds-card{display:flex;align-items:center;padding:10px;border:1px solid #ddd;border-radius:8px;cursor:pointer;background:#fff;transition:0.2s;margin-bottom:8px}.ds-card:hover{border-color:#7CB342;background:#fcfdfc}.ds-card.selected{border-color:#7CB342;background:#F1F8E9}.ds-r{appearance:none;width:16px;height:16px;border:2px solid #7CB342;border-radius:50%;outline:none;cursor:pointer;margin-right:10px;flex-shrink:0}.ds-r:checked{border-width:5px}.ds-cb{appearance:none;width:18px;height:18px;border:2px solid #7CB342;border-radius:4px;outline:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:#fff;margin-right:10px;flex-shrink:0}.ds-cb:checked{background:#7CB342}.ds-cb:checked::after{content:"✔";color:#fff;font-size:12px;font-weight:bold}.ds-step{display:flex;flex-direction:column}.ds-btns{margin-top:auto}.ds-lang{font-size:12px;color:#555;cursor:pointer;padding:2px 6px;border-radius:4px}.ds-lang.on{background:#7CB342;color:#fff;font-weight:bold}</style>'
+      + '<div style="background:#fff;color:#333;padding:20px;border-radius:10px;width:440px;box-shadow:0 8px 30px rgba(0,0,0,0.15);max-height:90vh;overflow-y:auto;">'
+      // language switcher (RU / EN)
+      + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:10px;"><span style="font-size:12px;color:#555;font-weight:bold;">' + L + '</span><span id="ds-lang-ru" class="ds-lang' + (lang === 'ru' ? ' on' : '') + '" style="' + (lang === 'ru' ? 'background:#7CB342;color:#fff;' : '') + '">RU</span><span id="ds-lang-en" class="ds-lang' + (lang === 'en' ? ' on' : '') + '" style="' + (lang === 'en' ? 'background:#7CB342;color:#fff;' : '') + '">EN</span></div>'
+      // STEP 1: formats
+      + '<div id="ds-step1" class="ds-step"' + (curStep === 1 ? '' : ' style="display:none;"') + '>'
+      + '<h3 style="margin-top:0;color:#33691E;font-size:16px;font-weight:700;margin-bottom:15px;">' + t('s1_t') + '</h3>'
+      + '<div style="font-size:12px;font-weight:bold;color:#555;margin-bottom:8px;">' + t('s1_sub') + '</div>'
+      + '<label class="ds-card selected"><input type="checkbox" name="ds-fmt" value="md" checked class="ds-r"><div><b style="color:#333;font-size:13px;">Markdown (.md)</b><br><span style="font-size:11px;color:#666;line-height:1.3;display:block;margin-top:2px;">' + t('f_md_d') + '</span></div></label>'
+      + '<label class="ds-card"><input type="checkbox" name="ds-fmt" value="html" class="ds-r"><div><b style="color:#333;font-size:13px;">HTML (.html)</b><br><span style="font-size:11px;color:#666;line-height:1.3;display:block;margin-top:2px;">' + t('f_html_d') + '</span></div></label>'
+      + '<label class="ds-card"><input type="checkbox" name="ds-fmt" value="json" class="ds-r"><div><b style="color:#333;font-size:13px;">JSON (.json)</b><br><span style="font-size:11px;color:#666;line-height:1.3;display:block;margin-top:2px;">' + t('f_json_d') + '</span></div></label>'
+      + '<label class="ds-card"><input type="checkbox" name="ds-fmt" value="txt" class="ds-r"><div><b style="color:#333;font-size:13px;">TXT (.txt)</b><br><span style="font-size:11px;color:#666;line-height:1.3;display:block;margin-top:2px;">' + t('f_txt_d') + '</span></div></label>'
+      + '<div style="font-size:12px;font-weight:bold;color:#555;margin-top:15px;margin-bottom:8px;">' + t('add_lbl') + '</div>'
+      + '<label style="display:flex;align-items:center;margin-bottom:8px;cursor:pointer;font-size:12px;color:#555;"><input type="checkbox" id="ds-user" checked class="ds-cb" style="width:16px;height:16px;"> ' + t('o_user') + '</label>'
+      + '<label style="display:flex;align-items:center;margin-bottom:8px;cursor:pointer;font-size:12px;color:#555;"><input type="checkbox" id="ds-think" class="ds-cb" style="width:16px;height:16px;"> ' + t('o_think') + '</label>'
+      + '<label style="display:flex;align-items:center;margin-bottom:8px;cursor:pointer;font-size:12px;color:#555;"><input type="checkbox" id="ds-math" checked class="ds-cb" style="width:16px;height:16px;"> ' + t('o_math') + '</label>'
+      + '<label style="display:flex;align-items:center;margin-bottom:15px;cursor:pointer;font-size:12px;color:#555;"><input type="checkbox" id="ds-remember-text" class="ds-cb" style="width:16px;height:16px;"> ' + t('o_rem_t') + '</label>'
+      + '<div class="ds-btns" style="display:flex;justify-content:flex-end;gap:10px;"><button id="ds-cancel1" style="background:#f0f0f0;color:#333;border:none;padding:8px 12px;border-radius:5px;cursor:pointer;font-size:13px;">' + t('btn_cancel') + '</button><button id="ds-next" style="background:#7CB342;color:#fff;border:none;padding:8px 16px;border-radius:5px;cursor:pointer;font-weight:500;font-size:13px;">' + t('btn_next') + '</button></div>'
+      + '</div>'
+      // STEP 2: attachments
+      + '<div id="ds-step2" class="ds-step"' + (curStep === 2 ? '' : ' style="display:none;"') + '>'
+      + '<h3 style="margin-top:0;color:#33691E;font-size:16px;font-weight:700;margin-bottom:12px;">' + t('s2_t') + '</h3>'
+      + '<div style="font-size:13px;font-weight:bold;color:#33691E;margin-bottom:8px;">' + t('s2_img') + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">'
+      + '<label class="ds-card selected"><input type="radio" name="ds-img" value="zip" checked class="ds-r"><div><b style="color:#33691E;font-size:13px;">' + t('i_zip') + '</b><br><span style="font-size:11px;color:#555;line-height:1.3;display:block;margin-top:2px;">' + t('i_zip_d') + '</span></div></label>'
+      + '<label class="ds-card"><input type="radio" name="ds-img" value="url" class="ds-r"><div><b style="color:#333;font-size:13px;">' + t('i_url') + '</b><br><span style="font-size:11px;color:#555;line-height:1.3;display:block;margin-top:2px;">' + t('i_url_d') + '</span></div></label>'
+      + '<label class="ds-card"><input type="radio" name="ds-img" value="base64" class="ds-r"><div><b style="color:#333;font-size:13px;">' + t('i_b64') + '</b><br><span style="font-size:11px;color:#555;line-height:1.3;display:block;margin-top:2px;">' + t('i_b64_d') + '</span></div></label>'
+      + '</div>'
+      + '<div style="font-size:13px;font-weight:bold;color:#33691E;margin-top:15px;margin-bottom:8px;">' + t('s2_files') + '</div>'
+      + '<label class="ds-card"><input type="checkbox" id="ds-files" class="ds-r"><div><b style="color:#333;font-size:13px;">' + t('f_lbl') + '</b><br><span style="font-size:11px;color:#666;line-height:1.3;display:block;margin-top:2px;">' + t('f_d') + '</span></div></label>'
+      + '<div style="font-size:12px;font-weight:bold;color:#555;margin-top:15px;margin-bottom:8px;">' + t('add_lbl') + '</div>'
+      + '<label style="display:flex;align-items:center;font-size:12px;color:#555;margin-bottom:15px;cursor:pointer;"><input type="checkbox" id="ds-remember-img" class="ds-cb" style="width:16px;height:16px;"> ' + t('o_rem_i') + '</label>'
+      + '<div class="ds-btns" style="display:flex;justify-content:space-between;gap:10px;"><button id="ds-back" style="background:#f0f0f0;color:#333;border:none;padding:8px 12px;border-radius:5px;cursor:pointer;font-size:13px;">' + t('btn_back') + '</button><div style="display:flex;gap:10px;"><button id="ds-cancel2" style="background:#f0f0f0;color:#333;border:none;padding:8px 12px;border-radius:5px;cursor:pointer;font-size:13px;">' + t('btn_cancel') + '</button><button id="ds-export" style="background:#7CB342;color:#fff;border:none;padding:8px 16px;border-radius:5px;cursor:pointer;font-weight:500;font-size:13px;">' + t('btn_export') + '</button></div></div>'
+      + '</div>'
+      + '</div></div>';
+  }
+
+  // Capture the current checkbox/radio state before re-rendering.
+  function snapshot() {
+    var fmts = [];
+    document.querySelectorAll('input[name="ds-fmt"]:checked').forEach(function (c) { fmts.push(c.value); });
+    var mode = document.querySelector('input[name="ds-img"]:checked');
+    return {
+      step: curStep, fmts: fmts,
+      user: document.getElementById('ds-user').checked,
+      think: document.getElementById('ds-think').checked,
+      math: document.getElementById('ds-math').checked,
+      remText: document.getElementById('ds-remember-text').checked,
+      mode: mode ? mode.value : 'zip',
+      files: document.getElementById('ds-files').checked,
+      remImg: document.getElementById('ds-remember-img').checked
+    };
+  }
+
+  // Restore the state after re-rendering.
+  function restore(st) {
+    curStep = st.step;
+    document.querySelectorAll('input[name="ds-fmt"]').forEach(function (cb) { cb.checked = false; });
+    st.fmts.forEach(function (f) { var el = document.querySelector('input[name="ds-fmt"][value="' + f + '"]'); if (el) el.checked = true; });
+    document.getElementById('ds-user').checked = st.user;
+    document.getElementById('ds-think').checked = st.think;
+    document.getElementById('ds-math').checked = st.math;
+    document.getElementById('ds-remember-text').checked = st.remText;
+    var rb = document.querySelector('input[name="ds-img"][value="' + st.mode + '"]'); if (rb) rb.checked = true;
+    document.getElementById('ds-files').checked = st.files;
+    document.getElementById('ds-remember-img').checked = st.remImg;
+    syncCards();
+  }
+
+  // Highlight selected cards (add/remove the .selected class).
+  function syncCards() {
+    document.querySelectorAll('input[name="ds-fmt"]').forEach(function (cb) { var card = cb.closest('.ds-card'); if (card) card.classList.toggle('selected', cb.checked); });
+    document.querySelectorAll('input[name="ds-img"]').forEach(function (rb) { var card = rb.closest('.ds-card'); if (card) card.classList.toggle('selected', rb.checked); });
+    var fc = document.getElementById('ds-files'); var fcard = fc ? fc.closest('.ds-card') : null; if (fcard) fcard.classList.toggle('selected', fc.checked);
+  }
+
+  // Attach all handlers (and equalize step heights).
+  function attach() {
+    var step1 = document.getElementById('ds-step1');
+    var step2 = document.getElementById('ds-step2');
+
+    // Equalize step heights so the dialog doesn't jump between steps.
+    var h1 = step1.offsetHeight || step1.clientHeight || 400;
+    step1.style.display = 'none'; step2.style.display = 'flex';
+    var h2 = step2.offsetHeight || step2.clientHeight || 400;
+    step2.style.display = 'none'; step1.style.display = curStep === 1 ? 'flex' : 'none';
+    if (curStep === 2) { step2.style.display = 'flex'; }
+    var mh = Math.max(h1, h2);
+    step1.style.minHeight = mh + 'px';
+    step2.style.minHeight = mh + 'px';
+
+    document.querySelectorAll('input[name="ds-fmt"]').forEach(function (cb) { cb.addEventListener('change', syncCards); });
+    document.querySelectorAll('input[name="ds-img"]').forEach(function (rb) { rb.addEventListener('change', syncCards); });
+    document.getElementById('ds-files').addEventListener('change', syncCards);
+
+    // Language switcher: re-render the dialog while preserving state.
+    document.getElementById('ds-lang-ru').onclick = function () {
+      if (lang === 'ru') return;
+      lang = 'ru'; localStorage.setItem('ds_lang', 'ru');
+      var st = snapshot(); m.innerHTML = makeHTML(); attach(); restore(st);
+    };
+    document.getElementById('ds-lang-en').onclick = function () {
+      if (lang === 'en') return;
+      lang = 'en'; localStorage.setItem('ds_lang', 'en');
+      var st = snapshot(); m.innerHTML = makeHTML(); attach(); restore(st);
+    };
+
+    // "Next" button (step 1 -> step 2).
+    document.getElementById('ds-next').onclick = function () {
+      var fmts = Array.from(document.querySelectorAll('input[name="ds-fmt"]:checked')).map(function (c) { return c.value; });
+      if (fmts.length === 0) { alert(t('err_nofmt')); return; }
+      var user = document.getElementById('ds-user').checked;
+      var think = document.getElementById('ds-think').checked;
+      var math = document.getElementById('ds-math').checked;
+      if (document.getElementById('ds-remember-text').checked) {
+        localStorage.setItem('ds_text_pref', JSON.stringify({ fmts: fmts, user: user, think: think, math: math }));
+      }
+      curStep = 2; step1.style.display = 'none'; step2.style.display = 'flex';
+    };
+
+    // "Back" button.
+    document.getElementById('ds-back').onclick = function () { curStep = 1; step2.style.display = 'none'; step1.style.display = 'flex'; };
+
+    // "Cancel" buttons.
+    var close = function () { m.remove(); res(null); };
+    document.getElementById('ds-cancel1').onclick = close;
+    document.getElementById('ds-cancel2').onclick = close;
+
+    // "Export" button: gather options and resolve the promise.
+    document.getElementById('ds-export').onclick = function () {
+      var fmts = Array.from(document.querySelectorAll('input[name="ds-fmt"]:checked')).map(function (c) { return c.value; });
+      var user = document.getElementById('ds-user').checked;
+      var think = document.getElementById('ds-think').checked;
+      var math = document.getElementById('ds-math').checked;
+      var mode = document.querySelector('input[name="ds-img"]:checked').value;
+      var files = document.getElementById('ds-files').checked;
+      if (document.getElementById('ds-remember-img').checked) {
+        localStorage.setItem('ds_img_pref', JSON.stringify({ mode: mode, files: files }));
+      }
+      m.remove();
+      res({ fmts: fmts, user: user, think: think, math: math, imgMode: mode, files: files });
+    };
+
+    // Restore saved preferences (only meaningful on the first build).
+    if (savedText) {
+      var p = JSON.parse(savedText);
+      document.querySelectorAll('input[name="ds-fmt"]').forEach(function (cb) { cb.checked = false; });
+      p.fmts.forEach(function (f) { var el = document.querySelector('input[name="ds-fmt"][value="' + f + '"]'); if (el) el.checked = true; });
+      document.getElementById('ds-user').checked = !!p.user;
+      document.getElementById('ds-think').checked = !!p.think;
+      document.getElementById('ds-math').checked = (p.math !== undefined) ? !!p.math : true;
+      syncCards();
+    }
+    if (savedImg) {
+      var simg = savedImg, sfiles = null;
+      try { var so = JSON.parse(savedImg); if (so && typeof so === 'object') { simg = so.mode || null; sfiles = (so.files !== undefined) ? so.files : null; } } catch (e) {}
+      if (simg) { var rb = document.querySelector('input[name="ds-img"][value="' + simg + '"]'); if (rb) rb.checked = true; }
+      if (sfiles !== null) { var fc = document.getElementById('ds-files'); if (fc) fc.checked = !!sfiles; }
+      syncCards();
+    }
+  }
+
+  // First render.
+  m.innerHTML = makeHTML();
+  attach();
+});
+
+// If the user clicked "Cancel" — exit.
+if (!opt) { removeMsg(); return; }
+// If documents are not needed — clear the file list.
+if (!opt.files) { msgs.forEach(function (m) { m.files = []; }); }
+
+
+// ============================================================================
+//  7. DOWNLOAD IMAGES AND FILES
+// ============================================================================
+
+showMsg(t('st_process'));
+var zip = new JSZip();
+
+var imgList = [];
+msgs.forEach(function (m) { m.imgs.forEach(function (u) { if (imgList.indexOf(u) < 0) imgList.push(u); }); });
+var imgMap = {};   // "image URL -> path in ZIP (or base64/url)"
+
+// Detect image format by magic bytes (the server may return a wrong Content-Type).
+async function detectExt(bb) {
+  try {
+    var buf = new Uint8Array(await bb.arrayBuffer());
+    if (buf[0] === 137 && buf[1] === 80 && buf[2] === 78 && buf[3] === 71) return 'png';
+    if (buf[0] === 255 && buf[1] === 216 && buf[2] === 255) return 'jpg';
+    if (buf[0] === 71 && buf[1] === 73 && buf[2] === 70) return 'gif';
+    if (buf[0] === 82 && buf[1] === 73 && buf[2] === 70 && buf[3] === 70 && buf[8] === 87 && buf[9] === 69 && buf[10] === 66 && buf[11] === 80) return 'webp';
+    if (buf[0] === 66 && buf[1] === 77) return 'bmp';
+    if (buf[0] === 60) return 'svg';
+  } catch (e) {}
+  var x = (bb.type || '').split('/')[1];
+  if (x === 'jpeg') x = 'jpg';
+  return (x && x !== 'octet-stream') ? x : 'png';
+}
+
+var imgOk = 0, imgFail = 0;
+
+if (opt.imgMode === 'url') {
+  // "links" mode: keep URLs, no download.
+  imgList.forEach(function (u) { imgMap[u] = u; });
+} else {
+  // "zip" or "base64" mode: download each image.
+  for (var i = 0; i < imgList.length; i++) {
+    var u = imgList[i];
+    try {
+      var rr = await fetch(u); var bb = await rr.blob();
+      if (opt.imgMode === 'base64') {
+        imgMap[u] = await new Promise(function (res2, rej) {
+          var fr = new FileReader();
+          fr.onloadend = function () { res2(fr.result); };
+          fr.onerror = rej;
+          fr.readAsDataURL(bb);
+        });
+        imgOk++;
+      } else {
+        var ext = await detectExt(bb);
+        var fn = chatName + '_images/image_' + (i + 1) + '.' + ext;
+        zip.file(fn, bb);
+        imgMap[u] = fn;
+        imgOk++;
+      }
+    } catch (e) { imgMap[u] = u; imgFail++; }   // failed -> keep as a link
+  }
+  if (imgFail > 0) { showMsg(t('warn_img_a') + imgFail + t('warn_img_b')); }
+}
+
+// Documents (non-image files).
+var fileMap = {}; var nameByUrl = {};
+msgs.forEach(function (m) { m.files.forEach(function (f) { if (f.url && !nameByUrl[f.url]) { nameByUrl[f.url] = f.name; } }); });
+var fileList = Object.keys(nameByUrl);
+for (var fi = 0; fi < fileList.length; fi++) {
+  var fu = fileList[fi];
+  try {
+    var frr = await fetch(fu); var fbb = await frr.blob();
+    var fext = 'bin'; var fnm = nameByUrl[fu] || '';
+    var fmm = String(fnm).match(/\.([a-zA-Z0-9]{1,10})$/); if (fmm) fext = fmm[1].toLowerCase();
+    var ffn = chatName + '_files/file_' + (fi + 1) + '.' + fext;
+    zip.file(ffn, fbb); fileMap[fu] = ffn;
+  } catch (e) { fileMap[fu] = fu; }
+}
+msgs.forEach(function (m) { m.files.forEach(function (f) { if (f.url && fileMap[f.url]) { f.url = fileMap[f.url]; } }); });
+
+
+// ============================================================================
+//  8. BUILD MD / HTML / JSON / TXT
+// ============================================================================
+
+function mdImg(u)   { return '![image](' + imgMap[u] + ')'; }
+function htmlImg(u) { return '<img src="' + escHtml(imgMap[u]) + '" alt="image">'; }
+
+var textMd = ''; var textHtml = ''; var textJson = []; var textTxt = ''; var mdLines = [];
+
+textHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script><style>body{font-family:system-ui,sans-serif;line-height:1.6;color:#333;max-width:none;margin:0;padding:24px}h1{color:#33691E}.user{background:#e3f2fd;padding:12px;border-radius:8px;margin:14px 0;border-left:4px solid #2196f3}.ai{background:#fafafa;padding:12px;border-radius:8px;margin:14px 0;border-left:4px solid #7CB342}h2{font-size:15px;margin:0 0 6px}.time{color:#888;font-size:12px;margin:0 0 8px}img{max-width:100%;border-radius:6px}hr{border:none;border-top:1px solid #eee;margin:18px 0}.footer{color:#999;font-size:12px;text-align:center;margin-top:20px}pre{background:#f4f4f4;padding:10px;border-radius:5px;overflow-x:auto}code{font-family:monospace;background:#f4f4f4;padding:2px 4px;border-radius:3px}</style></head><body><h1>' + t('h_title') + '</h1>';
+
+msgs.forEach(function (m) {
+  // tx = text with or without formula normalization (depending on the math checkbox).
+  var tx = opt.math ? m.text : m.raw;
+
+  if (m.role === 'user') {
+    // User message
+    if (opt.user) {
+      mdLines.push(t('m_user')); mdLines.push('');
+      if (m.ts) { mdLines.push(t('m_time') + fmtTime(m.ts)); mdLines.push(''); }
+      if (tx) { mdLines.push(tx); mdLines.push(''); }
+      m.imgs.forEach(function (u) { mdLines.push(mdImg(u)); mdLines.push(''); });
+      m.files.forEach(function (f) { mdLines.push(f.url ? '📎 [' + f.name + '](' + f.url + ')' : '📎 ' + f.name); mdLines.push(''); });
+      mdLines.push('---'); mdLines.push('');
+
+      textHtml += '<div class="user"><h2>' + t('m_user') + '</h2>' +
+        (m.ts ? '<p class="time">' + t('m_time') + fmtTime(m.ts) + '</p>' : '') +
+        '<div>' + renderMd(tx) + '</div>' +
+        m.imgs.map(htmlImg).join('') +
+        m.files.map(function (f) { return f.url ? '<p>📎 <a href="' + escHtml(f.url) + '">' + escHtml(f.name) + '</a></p>' : '<p>📎 ' + escHtml(f.name) + '</p>'; }).join('') +
+        '</div>';
+
+      textJson.push({ role: 'user', content: tx, time: m.ts ? fmtTime(m.ts) : '', images: m.imgs, files: m.files });
+
+      textTxt += t('t_user') + (m.ts ? ' (' + fmtTime(m.ts) + ')' : '') + '\n' + tx + '\n' +
+        m.files.map(function (f) { return t('t_file') + ' ' + f.name + (f.url ? ' (' + f.url + ')' : ''); }).join('\n') + '\n\n';
+    }
+  } else {
+    // Assistant message
+    mdLines.push(t('m_ai')); mdLines.push('');
+    if (opt.think && m.think) { mdLines.push('> ' + t('m_think')); mdLines.push('>'); m.think.split('\n').forEach(function (l) { mdLines.push('> ' + l); }); mdLines.push(''); }
+    if (tx) { mdLines.push(tx); mdLines.push(''); }
+    if (m.sources && m.sources.length) {
+      mdLines.push('**' + t('m_sources') + '**');
+      m.sources.forEach(function (s, i) { mdLines.push((i + 1) + '. ' + (s.url ? '[' + s.title + '](' + s.url + ')' : s.title)); });
+      mdLines.push('');
+    }
+    m.imgs.forEach(function (u) { mdLines.push(mdImg(u)); mdLines.push(''); });
+    m.files.forEach(function (f) { mdLines.push(f.url ? '📎 [' + f.name + '](' + f.url + ')' : '📎 ' + f.name); mdLines.push(''); });
+    mdLines.push('---'); mdLines.push('');
+
+    textHtml += '<div class="ai"><h2>' + t('m_ai') + '</h2>' +
+      (opt.think && m.think ? '<details style="margin-bottom:8px"><summary>' + t('m_think') + '</summary><div>' + renderMd(m.think) + '</div></details>' : '') +
+      '<div>' + renderMd(tx) + '</div>' +
+      (m.sources && m.sources.length ?
+        '<div style="margin-top:8px;font-size:12px;color:#555"><b>' + t('h_sources') + '</b><ol style="margin:4px 0 0 18px;padding:0">' +
+        m.sources.map(function (s) { return '<li>' + (s.url ? '<a href="' + escHtml(s.url) + '">' + escHtml(s.title) + '</a>' : escHtml(s.title)) + '</li>'; }).join('') +
+        '</ol></div>' : '') +
+      m.imgs.map(htmlImg).join('') +
+      m.files.map(function (f) { return f.url ? '<p>📎 <a href="' + escHtml(f.url) + '">' + escHtml(f.name) + '</a></p>' : '<p>📎 ' + escHtml(f.name) + '</p>'; }).join('') +
+      '</div>';
+
+    textJson.push({ role: 'assistant', content: tx, thinking: opt.think ? m.think : '', sources: m.sources || [], images: m.imgs, files: m.files });
+
+    textTxt += t('t_ai') +
+      (opt.think && m.think ? '\n' + t('t_think') + '\n' + m.think + '\n' : '') + '\n' + tx + '\n' +
+      (m.sources && m.sources.length ? t('t_sources') + '\n' + m.sources.map(function (s, i) { return (i + 1) + '. ' + s.title + (s.url ? ' (' + s.url + ')' : ''); }).join('\n') + '\n' : '') +
+      m.files.map(function (f) { return t('t_file') + ' ' + f.name + (f.url ? ' (' + f.url + ')' : ''); }).join('\n') + '\n\n';
+  }
+});
+
+textMd = mdLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+textHtml += '</body></html>';
+
+
+// ============================================================================
+//  9. SAVE THE ZIP ARCHIVE
+// ============================================================================
+
+var d = new Date();
+var p = function (n) { return String(n).padStart(2, '0'); };
+var dateStr = d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+var finalFileName = chatName + '_' + dateStr + '.zip';
+
+if (opt.fmts.indexOf('md') >= 0) zip.file(chatName + '.md', textMd);
+if (opt.fmts.indexOf('html') >= 0) zip.file(chatName + '.html', textHtml);
+if (opt.fmts.indexOf('json') >= 0) zip.file(chatName + '.json', JSON.stringify(textJson, null, 2));
+if (opt.fmts.indexOf('txt') >= 0) zip.file(chatName + '.txt', textTxt.trim());
+
+showMsg(t('st_build'));
+var zipBlob = await zip.generateAsync({ type: 'blob' });
+showMsg(t('st_save'));
+
+var url = URL.createObjectURL(zipBlob);
+var a = document.createElement('a');
+a.href = url; a.download = finalFileName;
+document.body.appendChild(a); a.click();
+document.body.removeChild(a); URL.revokeObjectURL(url);
+
+if (citMiss) { alert(t('warn_cit') + citKeys); }
+removeMsg();
