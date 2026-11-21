@@ -27,7 +27,7 @@ Key differences from exporter plugins:
 
 ## What the bookmarklet can do
 
-A focused tool for working with DeepSeek. At ~37KB (vs "all-in-one" combos >10MB), the script can:
+A focused tool for working with DeepSeek. At ~37 KB (vs "all-in-one" combos >10 MB), the script can:
 
 | Capability | Description |
 | --- | --- |
@@ -47,11 +47,11 @@ A focused tool for working with DeepSeek. At ~37KB (vs "all-in-one" combos >10MB
 
 **Step 1 — formats** (the RU/EN language switcher is in the top-right corner):
 
-![Step 1 — formats](screenshot-step-1-formats.png)
+<img src="PNG/screenshot-step-1-formats.png" width="75%" alt="Step 1 — formats">
 
 **Step 2 — attachments**:
 
-![Step 2 — attachments](screenshot-step-2-attachments.png)
+<img src="PNG/screenshot-step-2-attachments.png" width="75%" alt="Step 2 — attachments">
 
 ---
 
@@ -124,7 +124,7 @@ A brief comparison of our bookmarklet with a typical popular chat-export extensi
 | --- | --- | --- |
 | When it runs | Only when you click the bookmark | A background script runs constantly |
 | Where it connects | Only to DeepSeek's servers | To the developer's server |
-| Code size | ~37KB (single file) | >10 MB (group of files) |
+| Code size | ~37 KB (single file) | >10 MB (group of files) |
 | Third-party libraries | 2 public (JSZip, marked) from CDN | Everything bundled, no way to review |
 | Code readability | One readable file, no obfuscation | Minified, source cannot be read |
 | Your token | Used only in your browser | Stored/used by the extension with broad permissions |
