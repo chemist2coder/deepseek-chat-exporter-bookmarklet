@@ -112,7 +112,7 @@ A brief comparison of our bookmarklet with a typical popular chat-export extensi
 | --- | --- | --- |
 | When it runs | Only when you click the bookmark | A background script runs constantly |
 | Where it connects | Only to DeepSeek's servers | To the developer's server |
-| Code size | ~37KB (single file) | >10 MB (group of files) |
+| Code size | ~37KB (single file) | >10MB (group of files) |
 | Third-party libraries | 2 public (JSZip, marked) from CDN | Everything bundled, no way to review |
 | Code readability | One readable file, no obfuscation | Minified, source cannot be read |
 | Your token | Used only in your browser | Stored/used by the extension with broad permissions |
