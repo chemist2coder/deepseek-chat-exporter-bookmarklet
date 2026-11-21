@@ -46,11 +46,11 @@
 
 **Шаг 1 — форматы** (переключатель языка RU/EN — справа вверху):
 
-<img src="PNG/screenshot-step-1-formats.png" width="75%" alt="Шаг 1 — форматы">
+<img src="PNG/screenshot-step-1-formats.png" width="50%" alt="Шаг 1 — форматы">
 
 **Шаг 2 — вложения**:
 
-<img src="PNG/screenshot-step-2-attachments.png" width="75%" alt="Шаг 2 — вложения">
+<img src="PNG/screenshot-step-2-attachments.png" width="50%" alt="Шаг 2 — вложения">
 
 ---
 
